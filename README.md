@@ -1,4 +1,4 @@
-metadata
+---
 title: Chatbot
 emoji: 💬
 colorFrom: yellow
@@ -11,3 +11,4 @@ hf_oauth: true
 hf_oauth_scopes:
   - inference-api
 short_description: example
+---
