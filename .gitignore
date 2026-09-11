@@ -1,0 +1,25 @@
+# Secrets
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+
+# Model / HF caches
+.cache/
+models/
+*.safetensors
+*.bin
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
