@@ -1,15 +1,19 @@
+import spaces  # MUST be the first import — before anything CUDA-related
+
 import os
 import re
 
 import gradio as gr
+import torch
 from huggingface_hub import InferenceClient
 from transformers import pipeline
 
 # ---- Two most important lines in the whole assignment ----
-LOCAL_MODEL = "Qwen/Qwen3-0.6B"          # small enough to run on free CPU Space
+LOCAL_MODEL = "Qwen/Qwen3-0.6B"          # small model, run on this Space
 REMOTE_MODEL = "openai/gpt-oss-20b"      # bigger model, called via API
 
-# Loaded once at startup, regardless of the checkbox.
+# Loaded once at startup on CPU. ZeroGPU forbids CUDA at module level,
+# so the move to GPU happens inside the @spaces.GPU function below.
 pipe = pipeline("text-generation", model=LOCAL_MODEL)
 
 
@@ -20,7 +24,7 @@ def clean_token(raw):
     return raw.strip().strip('"').strip("'").strip()
 
 
-# Startup diagnostic - prints to your terminal, not the browser.
+# Startup diagnostic - prints to the container logs, not the browser.
 _env_token = clean_token(os.environ.get("HF_TOKEN"))
 if _env_token:
     print(
@@ -29,7 +33,13 @@ else:
     print("HF_TOKEN not set - remote model will rely on the login button.")
 
 
+@spaces.GPU(duration=60)
 def local_generate(messages, max_tokens, temperature, top_p):
+    # ZeroGPU attaches a GPU only while this function is executing.
+    if torch.cuda.is_available():
+        pipe.model.to("cuda")
+        pipe.device = torch.device("cuda")
+
     outputs = pipe(
         messages,
         max_new_tokens=max_tokens,
