@@ -1,78 +1,35 @@
-name: Notify Discord
+name: Notify MLOps Team
 
-# Fires after the other workflows finish, so your team gets one message
-# per completed run (sync to HF Spaces, pytest, etc.).
 on:
-  workflow_run:
-    workflows:
-      - "Sync to Hugging Face hub"   # must match the `name:` in sync-to-hf.yml
-      - "Run Tests"                  # must match the `name:` in tests.yml
-    types:
-      - completed
-  workflow_dispatch:                 # lets you fire a test message by hand
-
-permissions:
-  contents: read
+  push:
+    branches:
+      - main
 
 jobs:
   notify:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Send Discord notification
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test GitHub Action
+        run: |
+          echo "GitHub Action is running"
+          echo "Repository: ${{ github.repository }}"
+          echo "Commit: ${{ github.sha }}"
+
+      - name: Notify Discord
+        if: always()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          WF_NAME: ${{ github.event.workflow_run.name || 'Manual test notification' }}
-          WF_STATUS: ${{ github.event.workflow_run.conclusion || 'success' }}
-          WF_URL: ${{ github.event.workflow_run.html_url || format('{0}/{1}/actions', github.server_url, github.repository) }}
-          WF_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
-          WF_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          WF_ACTOR: ${{ github.event.workflow_run.actor.login || github.actor }}
-          REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-
-          if [ -z "${DISCORD_WEBHOOK:-}" ]; then
-            echo "::warning::DISCORD_WEBHOOK secret is not set - skipping notification."
-            exit 0
+          if [ "${{ job.status }}" = "success" ]; then
+            MESSAGE="✅ GitHub Action completed successfully! Commit: ${{ github.sha }}"
+          else
+            MESSAGE="❌ GitHub Action failed. Commit: ${{ github.sha }}"
           fi
 
-          case "$WF_STATUS" in
-            success)   COLOR=3066993;  EMOJI="✅" ;;
-            failure)   COLOR=15158332; EMOJI="❌" ;;
-            cancelled) COLOR=9807270;  EMOJI="⚪" ;;
-            *)         COLOR=15844367; EMOJI="⚠️" ;;
-          esac
-
-          SHORT_SHA="${WF_SHA:0:7}"
-
-          payload=$(jq -n \
-            --arg title  "$EMOJI $WF_NAME — $WF_STATUS" \
-            --arg url    "$WF_URL" \
-            --arg repo   "$REPO" \
-            --arg branch "$WF_BRANCH" \
-            --arg sha    "$SHORT_SHA" \
-            --arg actor  "$WF_ACTOR" \
-            --argjson color "$COLOR" \
-            '{
-              username: "CS553 Build Bot",
-              embeds: [{
-                title: $title,
-                url: $url,
-                color: $color,
-                fields: [
-                  { name: "Repository",   value: $repo,   inline: true },
-                  { name: "Branch",       value: $branch, inline: true },
-                  { name: "Commit",       value: $sha,    inline: true },
-                  { name: "Triggered by", value: $actor,  inline: true }
-                ],
-                footer: { text: "DS/CS 553 — Case Study 1" },
-                timestamp: (now | todateiso8601)
-              }]
-            }')
-
-          curl -sS -f -X POST \
-            -H "Content-Type: application/json" \
-            -d "$payload" \
-            "$DISCORD_WEBHOOK"
-
-          echo "Discord notification sent for: $WF_NAME ($WF_STATUS)"
+          curl -H "Content-Type: application/json" \
+               -d "{\"content\":\"$MESSAGE\"}" \
+               "$DISCORD_WEBHOOK"
