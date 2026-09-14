@@ -1,5 +1,3 @@
-import spaces
-
 import os
 import re
 
@@ -7,6 +5,17 @@ import gradio as gr
 import torch
 from huggingface_hub import InferenceClient
 from transformers import pipeline
+
+
+try:
+    import spaces
+
+    GPU = spaces.GPU
+except ImportError:
+    def GPU(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
 
 
 LOCAL_MODEL = "Qwen/Qwen3-0.6B"
@@ -23,18 +32,18 @@ def clean_token(raw):
     return raw.strip().strip('"').strip("'").strip()
 
 
-.
 _env_token = clean_token(os.environ.get("HF_TOKEN"))
 if _env_token:
     print(
-        f"HF_TOKEN found: length={len(_env_token)}, starts_with_hf_={_env_token.startswith('hf_')}")
+        f"HF_TOKEN found: length={len(_env_token)}, "
+        f"starts_with_hf_={_env_token.startswith('hf_')}"
+    )
 else:
     print("HF_TOKEN not set - remote model will rely on the login button.")
 
 
-@spaces.GPU(duration=60)
+@GPU(duration=60)
 def local_generate(messages, max_tokens, temperature, top_p):
-
     if torch.cuda.is_available():
         pipe.model.to("cuda")
         pipe.device = torch.device("cuda")
