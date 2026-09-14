@@ -21,7 +21,7 @@ except ImportError:
 LOCAL_MODEL = "Qwen/Qwen3-0.6B"
 REMOTE_MODEL = "openai/gpt-oss-20b"
 
-
+#  fffffff
 pipe = pipeline("text-generation", model=LOCAL_MODEL)
 
 
