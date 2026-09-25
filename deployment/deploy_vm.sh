@@ -29,7 +29,7 @@ set -euo pipefail
 : "${SSH_KEY:?Set SSH_KEY}"
 : "${AUTHORIZED_KEYS_FILE:?Set AUTHORIZED_KEYS_FILE}"
 
-REPO_URL="${REPO_URL:-https://github.com/Janhavi30052002/csds553-case-study-1-4.git}"
+REPO_URL="${REPO_URL:-https://github.com/kkcham45/csds553-case-study-1-4.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 DEPLOY_DIR="${DEPLOY_DIR:-/home/${VM_USER}/csds553-case-study-1-4}"
 
@@ -44,6 +44,11 @@ echo "[1/7] Checking local files..."
 
 test -f "$SSH_KEY" || {
     echo "ERROR: SSH private key not found: $SSH_KEY"
+    exit 1
+}
+
+test -f "${SSH_KEY}.pub" || {
+    echo "ERROR: SSH public key not found: ${SSH_KEY}.pub"
     exit 1
 }
 
@@ -65,7 +70,7 @@ mapfile -t PUBLIC_KEYS < <(
 
 # Derive the public key corresponding to the private key used
 # for this deployment and make sure it is included.
-DEPLOY_PUBLIC_KEY="$(ssh-keygen -y -f "$SSH_KEY" | tr -d '\r')"
+DEPLOY_PUBLIC_KEY="$(cat "${SSH_KEY}.pub" | awk '{print $1" "$2}')"
 
 KEY_FOUND=0
 for key in "${PUBLIC_KEYS[@]}"; do
@@ -148,6 +153,56 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 REMOTE_INSTALL
+
+echo "[7/7] Configuring StudyMate systemd service..."
+
+ssh "${SSH_OPTS[@]}" \
+    "${VM_USER}@${VM_HOST}" \
+    "VM_USER='$VM_USER' DEPLOY_DIR='$DEPLOY_DIR' bash -s" <<'REMOTE_SERVICE'
+set -euo pipefail
+
+SERVICE_FILE="/etc/systemd/system/studymate.service"
+ENV_DIR="/home/${VM_USER}/.config/studymate"
+ENV_FILE="${ENV_DIR}/env"
+
+sudo install -d -m 700 -o "$VM_USER" -g "$VM_USER" "$ENV_DIR"
+
+# Optional Hugging Face environment file.
+# The file is not required for local-model execution.
+# It can be populated later without changing the service definition.
+if [[ -f "$ENV_FILE" ]]; then
+    sudo chmod 600 "$ENV_FILE"
+fi
+
+sudo tee "$SERVICE_FILE" > /dev/null <<EOF
+[Unit]
+Description=StudyMate AI Gradio Application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${VM_USER}
+WorkingDirectory=${DEPLOY_DIR}
+Environment=PATH=${DEPLOY_DIR}/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+EnvironmentFile=-${ENV_FILE}
+ExecStart=${DEPLOY_DIR}/.venv/bin/python ${DEPLOY_DIR}/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable studymate.service
+sudo systemctl restart studymate.service
+
+sleep 3
+sudo systemctl --no-pager --full status studymate.service
+REMOTE_SERVICE
+
+echo "      StudyMate systemd service configured."
 
 echo "[7/7] Deployment complete."
 
